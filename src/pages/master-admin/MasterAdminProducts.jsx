@@ -110,9 +110,31 @@ function MultiSelectDropdown({ options = [], selected = [], onChange, placeholde
 }
 
 /* ---------- ProductRow with Active Toggle ---------- */
-function ProductRow({ p, onEdit, onDelete, onToggleActive, busyToggleId, onOpenBatches }) {
+function ProductRow({ p, onEdit, onDelete, onToggleActive, busyToggleId, onOpenBatches, tagsById, latestBatchTsByProductId }) {
   const isBusy = busyToggleId === p.id;
   const isActive = Boolean(p.active);
+  const latestTs = latestBatchTsByProductId?.[Number(p.id)] ?? (p.created_at ? new Date(p.created_at).getTime() : null);
+  const monthsOld = (() => {
+    if (!latestTs) return null;
+    const ms = Date.now() - latestTs;
+    const months = ms / (1000 * 60 * 60 * 24 * 30);
+    return months;
+  })();
+  const toneClass = (() => {
+    if (monthsOld == null) return "bg-gray-50 text-gray-600 border-gray-200";
+    if (monthsOld < 3) return "bg-emerald-50 text-emerald-700 border-emerald-100"; // new arrived
+    if (monthsOld < 6) return "bg-blue-50 text-blue-700 border-blue-100"; // 3 months
+    if (monthsOld < 9) return "bg-amber-50 text-amber-700 border-amber-100"; // 6 months
+    if (monthsOld < 12) return "bg-orange-50 text-orange-700 border-orange-100"; // 9 months
+    return "bg-red-50 text-red-700 border-red-100"; // 12 months
+  })();
+  const stockValue = p.stocklevel_quantity ?? p.stock_quantity ?? p.stocklevel_quantity ?? 0;
+  const productTagIds = Array.isArray(p.tag_ids)
+    ? p.tag_ids
+    : Array.isArray(p.tags)
+    ? p.tags.map((t) => (typeof t === "object" ? t.id : t))
+    : [];
+  const productTagNames = (productTagIds || []).map((id) => tagsById?.[id]).filter(Boolean);
   return (
     <tr>
       <td className="px-4 py-4 whitespace-nowrap align-top">
@@ -139,12 +161,27 @@ function ProductRow({ p, onEdit, onDelete, onToggleActive, busyToggleId, onOpenB
           </span>
         </div>
         <div className="text-xs text-gray-500 mt-1">{p.sku}</div>
-        <div className="text-xs text-gray-400 mt-1">
-          Stock: <span className="font-medium">{p.stocklevel_quantity ?? p.stock_quantity ?? p.stocklevel_quantity ?? 0}</span>
-        </div>
+        {productTagNames.length > 0 && (
+          <div className="flex items-center gap-1 mt-1 flex-wrap">
+            {productTagNames.slice(0, 3).map((name) => (
+              <span key={name} className="text-[10px] px-2 py-0.5 rounded-full border bg-gray-50 text-gray-700 border-gray-200">
+                {name}
+              </span>
+            ))}
+            {productTagNames.length > 3 && (
+              <span className="text-[10px] px-2 py-0.5 rounded-full border bg-gray-50 text-gray-600 border-gray-200">+{productTagNames.length - 3}</span>
+            )}
+          </div>
+        )}
       </td>
 
       <td className="px-4 py-4 align-top text-sm text-gray-600">{p.category}</td>
+
+      <td className="px-4 py-4 align-top text-sm">
+        <span className={`inline-flex items-center text-[11px] px-2 py-0.5 rounded-full border ${toneClass}`} title={monthsOld == null ? "Unknown" : `${Math.floor(monthsOld)} mo old`}>
+          {stockValue}
+        </span>
+      </td>
 
       <td className="px-4 py-4 align-top text-sm font-semibold text-gray-900">₹{p.price}</td>
 
@@ -238,6 +275,23 @@ export default function MasterAdminProducts() {
   const [batchesDrawer, setBatchesDrawer] = useState({ open: false, product: null, list: [], loading: false });
 
   const drawerFormRef = useRef(null);
+  const tagsById = useMemo(() => {
+    const map = {};
+    (tags || []).forEach((t) => {
+      if (t && (t.id != null)) map[t.id] = t.name || String(t.id);
+    });
+    return map;
+  }, [tags]);
+  const latestBatchTsByProductId = useMemo(() => {
+    const map = {};
+    (batches || []).forEach((b) => {
+      const pid = Number(b.product_id);
+      const ts = new Date(b.added_at || b.created_at || b.expire_date || 0).getTime();
+      if (!Number.isFinite(ts)) return;
+      if (!map[pid] || ts > map[pid]) map[pid] = ts;
+    });
+    return map;
+  }, [batches]);
 
   // generic apiRequest uses configured HOST + BASE
   async function apiRequest(path, { method = "GET", body = null, raw = false } = {}) {
@@ -350,14 +404,22 @@ export default function MasterAdminProducts() {
 
       // category chips
       if (selectedCategoryIds.length > 0) {
-        const catIds = Array.isArray(p.category_ids) ? p.category_ids : [];
+        const catIds = Array.isArray(p.category_ids)
+          ? p.category_ids
+          : Array.isArray(p.categories)
+          ? p.categories.map((c) => (typeof c === "object" ? c.id : c))
+          : [];
         const intersects = catIds.some((id) => selectedCategoryIds.includes(id));
         if (!intersects) return false;
       }
 
       // tag chips
       if (selectedTagIds.length > 0) {
-        const tagIds = Array.isArray(p.tag_ids) ? p.tag_ids : [];
+        const tagIds = Array.isArray(p.tag_ids)
+          ? p.tag_ids
+          : Array.isArray(p.tags)
+          ? p.tags.map((t) => (typeof t === "object" ? t.id : t))
+          : [];
         const intersects = tagIds.some((id) => selectedTagIds.includes(id));
         if (!intersects) return false;
       }
@@ -442,6 +504,24 @@ export default function MasterAdminProducts() {
     setStockMax("");
     setQuery("");
   }
+
+  function getDomain(values, fallbackMax) {
+    const nums = values.filter((v) => Number.isFinite(v));
+    if (nums.length === 0) return { min: 0, max: fallbackMax };
+    return { min: Math.min(...nums), max: Math.max(...nums) };
+  }
+
+  const priceDomain = useMemo(() => {
+    const values = products.map((p) => Number(p.price ?? 0)).filter((n) => !Number.isNaN(n));
+    const { min, max } = getDomain(values, 1000);
+    return { min, max };
+  }, [products]);
+
+  const stockDomain = useMemo(() => {
+    const values = products.map((p) => Number(p.stocklevel_quantity ?? p.stock_quantity ?? 0)).filter((n) => !Number.isNaN(n));
+    const { min, max } = getDomain(values, 100);
+    return { min, max };
+  }, [products]);
 
   function openAdd() {
     setEditing(null);
@@ -732,24 +812,19 @@ export default function MasterAdminProducts() {
                 </button>
               ))}
             </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <div>
-                <label className="block text-xs text-gray-500">Min Price</label>
-                <input value={priceMin} onChange={(e) => setPriceMin(e.target.value)} type="number" className="mt-1 w-full px-2 py-1 border rounded" />
-              </div>
-              <div>
-                <label className="block text-xs text-gray-500">Max Price</label>
-                <input value={priceMax} onChange={(e) => setPriceMax(e.target.value)} type="number" className="mt-1 w-full px-2 py-1 border rounded" />
-              </div>
-              <div>
-                <label className="block text-xs text-gray-500">Min Stock</label>
-                <input value={stockMin} onChange={(e) => setStockMin(e.target.value)} type="number" className="mt-1 w-full px-2 py-1 border rounded" />
-              </div>
-              <div>
-                <label className="block text-xs text-gray-500">Max Stock</label>
-                <input value={stockMax} onChange={(e) => setStockMax(e.target.value)} type="number" className="mt-1 w-full px-2 py-1 border rounded" />
-              </div>
-            </div>
+            {/* Range sliders */}
+            <RangeSliders
+              priceDomain={priceDomain}
+              stockDomain={stockDomain}
+              priceMin={priceMin}
+              priceMax={priceMax}
+              stockMin={stockMin}
+              stockMax={stockMax}
+              setPriceMin={setPriceMin}
+              setPriceMax={setPriceMax}
+              setStockMin={setStockMin}
+              setStockMax={setStockMax}
+            />
             <div className="flex items-center justify-between">
               <div className="text-xs text-gray-500">{filtered.length} matching products</div>
               <button onClick={clearAllFilters} className="text-xs px-3 py-1.5 rounded border">Clear filters</button>
@@ -830,6 +905,8 @@ export default function MasterAdminProducts() {
                     onToggleActive={handleToggleActive}
                     busyToggleId={busyToggleId}
                     onOpenBatches={openBatchesDrawer}
+                    tagsById={tagsById}
+                    latestBatchTsByProductId={latestBatchTsByProductId}
                   />
                 ))
               )}
@@ -1173,6 +1250,144 @@ function CreateBatchForm({ product, onCreate }) {
         <button type="submit" disabled={busy} className="px-3 py-1 rounded bg-indigo-600 text-white">{busy ? "Creating..." : "Create"}</button>
       </div>
     </form>
+  );
+}
+
+/* ---------- RangeSliders component (price & stock) ---------- */
+function RangeSliders({
+  priceDomain,
+  stockDomain,
+  priceMin,
+  priceMax,
+  stockMin,
+  stockMax,
+  setPriceMin,
+  setPriceMax,
+  setStockMin,
+  setStockMax,
+}) {
+  const [pMin, setPMin] = useState(priceMin === "" ? priceDomain.min : Number(priceMin));
+  const [pMax, setPMax] = useState(priceMax === "" ? priceDomain.max : Number(priceMax));
+  const [sMin, setSMin] = useState(stockMin === "" ? stockDomain.min : Number(stockMin));
+  const [sMax, setSMax] = useState(stockMax === "" ? stockDomain.max : Number(stockMax));
+
+  useEffect(() => {
+    setPMin(priceMin === "" ? priceDomain.min : Number(priceMin));
+  }, [priceMin, priceDomain.min]);
+  useEffect(() => {
+    setPMax(priceMax === "" ? priceDomain.max : Number(priceMax));
+  }, [priceMax, priceDomain.max]);
+  useEffect(() => {
+    setSMin(stockMin === "" ? stockDomain.min : Number(stockMin));
+  }, [stockMin, stockDomain.min]);
+  useEffect(() => {
+    setSMax(stockMax === "" ? stockDomain.max : Number(stockMax));
+  }, [stockMax, stockDomain.max]);
+
+  function clamp(val, min, max) {
+    return Math.max(min, Math.min(max, val));
+  }
+
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="p-3 border rounded">
+        <div className="flex items-center justify-between mb-2 text-xs text-gray-600">
+          <span>Price</span>
+          <span>
+            ₹{pMin} - ₹{pMax}
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <input
+            type="range"
+            min={priceDomain.min}
+            max={priceDomain.max}
+            value={pMin}
+            onChange={(e) => setPMin(clamp(Number(e.target.value), priceDomain.min, pMax))}
+            className="w-full"
+          />
+          <input
+            type="range"
+            min={priceDomain.min}
+            max={priceDomain.max}
+            value={pMax}
+            onChange={(e) => setPMax(clamp(Number(e.target.value), pMin, priceDomain.max))}
+            className="w-full"
+          />
+        </div>
+        <div className="mt-2 flex items-center justify-between">
+          <button
+            className="text-xs px-2 py-1 rounded border"
+            onClick={() => {
+              setPMin(priceDomain.min);
+              setPMax(priceDomain.max);
+              setPriceMin("");
+              setPriceMax("");
+            }}
+          >
+            Reset
+          </button>
+          <button
+            className="text-xs px-2 py-1 rounded bg-emerald-600 text-white"
+            onClick={() => {
+              setPriceMin(String(pMin));
+              setPriceMax(String(pMax));
+            }}
+          >
+            Apply
+          </button>
+        </div>
+      </div>
+
+      <div className="p-3 border rounded">
+        <div className="flex items-center justify-between mb-2 text-xs text-gray-600">
+          <span>Stock</span>
+          <span>
+            {sMin} - {sMax}
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <input
+            type="range"
+            min={stockDomain.min}
+            max={stockDomain.max}
+            value={sMin}
+            onChange={(e) => setSMin(clamp(Number(e.target.value), stockDomain.min, sMax))}
+            className="w-full"
+          />
+          <input
+            type="range"
+            min={stockDomain.min}
+            max={stockDomain.max}
+            value={sMax}
+            onChange={(e) => setSMax(clamp(Number(e.target.value), sMin, stockDomain.max))}
+            className="w-full"
+          />
+        </div>
+        <div className="mt-2 flex items-center justify-between">
+          <button
+            className="text-xs px-2 py-1 rounded border"
+            onClick={() => {
+              setSMin(stockDomain.min);
+              setSMax(stockDomain.max);
+              setStockMin("");
+              setStockMax("");
+            }}
+          >
+            Reset
+          </button>
+          <button
+            className="text-xs px-2 py-1 rounded bg-emerald-600 text-white"
+            onClick={() => {
+              setStockMin(String(sMin));
+              setStockMax(String(sMax));
+            }}
+          >
+            Apply
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
