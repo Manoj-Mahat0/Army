@@ -1106,6 +1106,32 @@ export default function MasterAdminProducts() {
                           type="number"
                         />
                         <div className="text-xs text-gray-500">This will create initial batch for product when created.</div>
+
+                        <div className="mt-4 grid grid-cols-2 gap-4">
+                          <div>
+                            <label className="text-sm text-gray-600">Unit</label>
+                            <select
+                              value={form.unit}
+                              onChange={(e) => setForm((f) => ({ ...f, unit: e.target.value }))}
+                              className="mt-1 w-full px-3 py-2 border rounded bg-white"
+                            >
+                              <option value="pcs">pcs</option>
+                              <option value="box">box</option>
+                              <option value="kg">kg</option>
+                              <option value="g">g</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="text-sm text-gray-600">Expire date</label>
+                            <input
+                              value={form.expire_date}
+                              onChange={(e) => setForm((f) => ({ ...f, expire_date: e.target.value }))}
+                              className="mt-1 w-full px-3 py-2 border rounded"
+                              type="date"
+                            />
+                            <div className="text-xs text-gray-500">Will be sent as YYYY-MM-DDT00:00:00</div>
+                          </div>
+                        </div>
                       </div>
                     ) : (
                       <div>
