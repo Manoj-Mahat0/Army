@@ -266,7 +266,7 @@ export default function MasterAdminProducts() {
     file: null,
     initial_quantity: "",
     stocklevel_quantity: "",
-    unit: "pcs",
+    unit: "box",
     expire_date: "",
   });
 
@@ -546,7 +546,7 @@ export default function MasterAdminProducts() {
       file: null,
       initial_quantity: "",
       stocklevel_quantity: "",
-      unit: "pcs",
+      unit: "box",
       expire_date: "",
     });
     setPreviewUrl(null);
@@ -570,7 +570,7 @@ export default function MasterAdminProducts() {
       file: null,
       initial_quantity: "",
       stocklevel_quantity: p.stocklevel_quantity ?? p.stock_quantity ?? "",
-      unit: p.unit ?? "pcs",
+      unit: p.unit ?? "box",
       expire_date: "",
     });
     setPreviewUrl(p.image_url ? (p.image_url.startsWith("http") ? p.image_url : `${API_HOST}${p.image_url}`) : null);
@@ -614,7 +614,7 @@ export default function MasterAdminProducts() {
 
       if (!editing) {
         if (form.initial_quantity !== "") fd.append("initial_quantity", form.initial_quantity);
-        fd.append("unit", form.unit || "pcs");
+        fd.append("unit", form.unit || "box");
         if (form.expire_date) {
           const exp = String(form.expire_date);
           const expStr = exp.includes("T") ? exp : `${exp}T00:00:00`;
