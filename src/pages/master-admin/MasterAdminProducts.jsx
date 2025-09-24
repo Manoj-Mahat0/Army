@@ -602,6 +602,7 @@ export default function MasterAdminProducts() {
       fd.append("sku", form.sku);
       fd.append("name", form.name);
       if (form.weight !== "") fd.append("weight", form.weight);
+      // Skip min/max quantity if not provided
       if (form.min_quantity !== "") fd.append("min_quantity", form.min_quantity);
       if (form.max_quantity !== "") fd.append("max_quantity", form.max_quantity);
       if (form.price !== "") fd.append("price", form.price);
@@ -1021,29 +1022,6 @@ export default function MasterAdminProducts() {
                         <input
                           value={form.weight}
                           onChange={(e) => setForm((f) => ({ ...f, weight: e.target.value }))}
-                          className="mt-1 w-full px-3 py-2 border rounded"
-                          type="number"
-                          required
-                        />
-                      </div>
-                      <div>
-                        <label className="text-sm text-gray-600">Min quantity</label>
-                        <input
-                          value={form.min_quantity}
-                          onChange={(e) => setForm((f) => ({ ...f, min_quantity: e.target.value }))}
-                          className="mt-1 w-full px-3 py-2 border rounded"
-                          type="number"
-                          required
-                        />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="text-sm text-gray-600">Max quantity</label>
-                        <input
-                          value={form.max_quantity}
-                          onChange={(e) => setForm((f) => ({ ...f, max_quantity: e.target.value }))}
                           className="mt-1 w-full px-3 py-2 border rounded"
                           type="number"
                           required
