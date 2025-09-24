@@ -195,6 +195,16 @@ export default function MasterAdminProducts() {
   const [metaLoading, setMetaLoading] = useState(true);
 
   const [query, setQuery] = useState("");
+  const [selectedCategoryIds, setSelectedCategoryIds] = useState([]);
+  const [selectedTagIds, setSelectedTagIds] = useState([]);
+  const [priceMin, setPriceMin] = useState("");
+  const [priceMax, setPriceMax] = useState("");
+  const [stockMin, setStockMin] = useState("");
+  const [stockMax, setStockMax] = useState("");
+  const [sortBy, setSortBy] = useState("name"); // name | category | price | gst_rate | stock
+  const [sortDir, setSortDir] = useState("asc"); // asc | desc
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const [showDrawer, setShowDrawer] = useState(false);
   const [editing, setEditing] = useState(null);
 
@@ -321,16 +331,117 @@ export default function MasterAdminProducts() {
     return () => (mounted = false);
   }, [token]);
 
+  // Reset to first page when filters/sorts change
+  useEffect(() => {
+    setPage(1);
+  }, [query, selectedCategoryIds, selectedTagIds, priceMin, priceMax, stockMin, stockMax, sortBy, sortDir]);
+
   const filtered = useMemo(() => {
-    if (!query.trim()) return products;
-    const q = query.toLowerCase();
-    return products.filter(
-      (p) =>
-        (p.name && p.name.toLowerCase().includes(q)) ||
-        (p.sku && p.sku.toLowerCase().includes(q)) ||
-        (p.category && p.category.toLowerCase().includes(q))
-    );
-  }, [products, query]);
+    const q = query.trim().toLowerCase();
+    return products.filter((p) => {
+      // search
+      if (q) {
+        const hit =
+          (p.name && p.name.toLowerCase().includes(q)) ||
+          (p.sku && p.sku.toLowerCase().includes(q)) ||
+          (p.category && p.category.toLowerCase().includes(q));
+        if (!hit) return false;
+      }
+
+      // category chips
+      if (selectedCategoryIds.length > 0) {
+        const catIds = Array.isArray(p.category_ids) ? p.category_ids : [];
+        const intersects = catIds.some((id) => selectedCategoryIds.includes(id));
+        if (!intersects) return false;
+      }
+
+      // tag chips
+      if (selectedTagIds.length > 0) {
+        const tagIds = Array.isArray(p.tag_ids) ? p.tag_ids : [];
+        const intersects = tagIds.some((id) => selectedTagIds.includes(id));
+        if (!intersects) return false;
+      }
+
+      // price range
+      const priceNum = Number(p.price ?? 0);
+      if (priceMin !== "" && priceNum < Number(priceMin)) return false;
+      if (priceMax !== "" && priceNum > Number(priceMax)) return false;
+
+      // stock range
+      const stockNum = Number(p.stocklevel_quantity ?? p.stock_quantity ?? 0);
+      if (stockMin !== "" && stockNum < Number(stockMin)) return false;
+      if (stockMax !== "" && stockNum > Number(stockMax)) return false;
+
+      return true;
+    });
+  }, [products, query, selectedCategoryIds, selectedTagIds, priceMin, priceMax, stockMin, stockMax]);
+
+  const sorted = useMemo(() => {
+    const arr = [...filtered];
+    const dir = sortDir === "asc" ? 1 : -1;
+    arr.sort((a, b) => {
+      let va;
+      let vb;
+      if (sortBy === "name") {
+        va = (a.name || "").toLowerCase();
+        vb = (b.name || "").toLowerCase();
+      } else if (sortBy === "category") {
+        va = (a.category || "").toLowerCase();
+        vb = (b.category || "").toLowerCase();
+      } else if (sortBy === "price") {
+        va = Number(a.price ?? 0);
+        vb = Number(b.price ?? 0);
+      } else if (sortBy === "gst_rate") {
+        va = Number(a.gst_rate ?? 0);
+        vb = Number(b.gst_rate ?? 0);
+      } else if (sortBy === "stock") {
+        va = Number(a.stocklevel_quantity ?? a.stock_quantity ?? 0);
+        vb = Number(b.stocklevel_quantity ?? b.stock_quantity ?? 0);
+      } else {
+        va = 0;
+        vb = 0;
+      }
+      if (va < vb) return -1 * dir;
+      if (va > vb) return 1 * dir;
+      return 0;
+    });
+    return arr;
+  }, [filtered, sortBy, sortDir]);
+
+  const totalItems = sorted.length;
+  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const paginated = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return sorted.slice(start, start + pageSize);
+  }, [sorted, currentPage, pageSize]);
+
+  function toggleSort(column) {
+    if (sortBy === column) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortBy(column);
+      setSortDir("asc");
+    }
+  }
+
+  function toggleCategoryFilter(id) {
+    setSelectedCategoryIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  }
+
+  function toggleTagFilter(id) {
+    setSelectedTagIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  }
+
+  function clearAllFilters() {
+    setSelectedCategoryIds([]);
+    setSelectedTagIds([]);
+    setPriceMin("");
+    setPriceMax("");
+    setStockMin("");
+    setStockMax("");
+    setQuery("");
+  }
 
   function openAdd() {
     setEditing(null);
@@ -582,16 +693,91 @@ export default function MasterAdminProducts() {
           </div>
         </div>
 
+        {/* Inline filters */}
+        <div className="mt-6 bg-white rounded-xl border border-gray-100 p-3">
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center gap-3 overflow-x-auto">
+              <span className="text-xs text-gray-500 flex-shrink-0">Categories:</span>
+              <button
+                className={`text-xs px-2 py-1 rounded-full border ${selectedCategoryIds.length === 0 ? "bg-emerald-50 text-emerald-700 border-emerald-100" : "bg-white text-gray-700 border-gray-200"}`}
+                onClick={() => setSelectedCategoryIds([])}
+              >
+                All
+              </button>
+              {categories.map((c) => (
+                <button
+                  key={c.id}
+                  className={`text-xs px-2 py-1 rounded-full border ${selectedCategoryIds.includes(c.id) ? "bg-emerald-50 text-emerald-700 border-emerald-100" : "bg-white text-gray-700 border-gray-200"}`}
+                  onClick={() => toggleCategoryFilter(c.id)}
+                >
+                  {c.name}
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center gap-3 overflow-x-auto">
+              <span className="text-xs text-gray-500 flex-shrink-0">Tags:</span>
+              <button
+                className={`text-xs px-2 py-1 rounded-full border ${selectedTagIds.length === 0 ? "bg-emerald-50 text-emerald-700 border-emerald-100" : "bg-white text-gray-700 border-gray-200"}`}
+                onClick={() => setSelectedTagIds([])}
+              >
+                All
+              </button>
+              {tags.map((t) => (
+                <button
+                  key={t.id}
+                  className={`text-xs px-2 py-1 rounded-full border ${selectedTagIds.includes(t.id) ? "bg-emerald-50 text-emerald-700 border-emerald-100" : "bg-white text-gray-700 border-gray-200"}`}
+                  onClick={() => toggleTagFilter(t.id)}
+                >
+                  {t.name}
+                </button>
+              ))}
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div>
+                <label className="block text-xs text-gray-500">Min Price</label>
+                <input value={priceMin} onChange={(e) => setPriceMin(e.target.value)} type="number" className="mt-1 w-full px-2 py-1 border rounded" />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500">Max Price</label>
+                <input value={priceMax} onChange={(e) => setPriceMax(e.target.value)} type="number" className="mt-1 w-full px-2 py-1 border rounded" />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500">Min Stock</label>
+                <input value={stockMin} onChange={(e) => setStockMin(e.target.value)} type="number" className="mt-1 w-full px-2 py-1 border rounded" />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500">Max Stock</label>
+                <input value={stockMax} onChange={(e) => setStockMax(e.target.value)} type="number" className="mt-1 w-full px-2 py-1 border rounded" />
+              </div>
+            </div>
+            <div className="flex items-center justify-between">
+              <div className="text-xs text-gray-500">{filtered.length} matching products</div>
+              <button onClick={clearAllFilters} className="text-xs px-3 py-1.5 rounded border">Clear filters</button>
+            </div>
+          </div>
+        </div>
+
         {/* table card */}
         <div className="mt-6 bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
           <table className="min-w-full divide-y divide-gray-100">
             <thead className="bg-white">
               <tr>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500">Image</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500">Product</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500">Category</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500">Price</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500">GST</th>
+                <th onClick={() => toggleSort("name")} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 cursor-pointer select-none">
+                  Product {sortBy === "name" && <span className="ml-1">{sortDir === "asc" ? "▲" : "▼"}</span>}
+                </th>
+                <th onClick={() => toggleSort("category")} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 cursor-pointer select-none">
+                  Category {sortBy === "category" && <span className="ml-1">{sortDir === "asc" ? "▲" : "▼"}</span>}
+                </th>
+                <th onClick={() => toggleSort("stock")} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 cursor-pointer select-none">
+                  Stock {sortBy === "stock" && <span className="ml-1">{sortDir === "asc" ? "▲" : "▼"}</span>}
+                </th>
+                <th onClick={() => toggleSort("price")} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 cursor-pointer select-none">
+                  Price {sortBy === "price" && <span className="ml-1">{sortDir === "asc" ? "▲" : "▼"}</span>}
+                </th>
+                <th onClick={() => toggleSort("gst_rate")} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 cursor-pointer select-none">
+                  GST {sortBy === "gst_rate" && <span className="ml-1">{sortDir === "asc" ? "▲" : "▼"}</span>}
+                </th>
                 <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500">Actions</th>
               </tr>
             </thead>
@@ -611,6 +797,9 @@ export default function MasterAdminProducts() {
                       <div className="h-4 bg-gray-100 rounded w-24 animate-pulse" />
                     </td>
                     <td className="px-4 py-6">
+                      <div className="h-4 bg-gray-100 rounded w-16 animate-pulse" />
+                    </td>
+                    <td className="px-4 py-6">
                       <div className="h-4 bg-gray-100 rounded w-20 animate-pulse" />
                     </td>
                     <td className="px-4 py-6">
@@ -625,14 +814,14 @@ export default function MasterAdminProducts() {
                     </td>
                   </tr>
                 ))
-              ) : filtered.length === 0 ? (
+              ) : paginated.length === 0 ? (
                 <tr>
                   <td colSpan="6" className="px-4 py-8 text-center text-sm text-gray-500">
                     No products found.
                   </td>
                 </tr>
               ) : (
-                filtered.map((p) => (
+                paginated.map((p) => (
                   <ProductRow
                     key={p.id}
                     p={p}
@@ -646,6 +835,23 @@ export default function MasterAdminProducts() {
               )}
             </tbody>
           </table>
+
+          {/* Pagination */}
+          <div className="px-4 py-3 flex items-center justify-between">
+            <div className="text-xs text-gray-500">Page {currentPage} of {totalPages} • {totalItems} items</div>
+            <div className="flex items-center gap-3">
+              <select value={pageSize} onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }} className="text-sm border rounded px-2 py-1">
+                <option value={10}>10 / page</option>
+                <option value={25}>25 / page</option>
+                <option value={50}>50 / page</option>
+                <option value={100}>100 / page</option>
+              </select>
+              <div className="flex items-center gap-1">
+                <button disabled={currentPage <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))} className="px-2 py-1 text-sm rounded border disabled:opacity-50">Prev</button>
+                <button disabled={currentPage >= totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))} className="px-2 py-1 text-sm rounded border disabled:opacity-50">Next</button>
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Drawer: add/edit */}
