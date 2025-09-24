@@ -178,7 +178,14 @@ function ProductRow({ p, onEdit, onDelete, onToggleActive, busyToggleId, onOpenB
       <td className="px-4 py-4 align-top text-sm text-gray-600">{p.category}</td>
 
       <td className="px-4 py-4 align-top text-sm">
-        <span className={`inline-flex items-center text-[11px] px-2 py-0.5 rounded-full border ${toneClass}`} title={monthsOld == null ? "Unknown" : `${Math.floor(monthsOld)} mo old`}>
+        <span
+          className={`inline-flex items-center text-[11px] px-2 py-0.5 rounded-full border ${toneClass}`}
+          title={
+            monthsOld == null
+              ? "Unknown"
+              : `${monthsOld.toFixed(1)} mo old • since ${latestTs ? new Date(latestTs).toLocaleDateString() : "-"}`
+          }
+        >
           {stockValue}
         </span>
       </td>
@@ -776,6 +783,15 @@ export default function MasterAdminProducts() {
         {/* Inline filters */}
         <div className="mt-6 bg-white rounded-xl border border-gray-100 p-3">
           <div className="flex flex-col gap-3">
+            {/* Legend for stock age colors */}
+            <div className="flex items-center gap-2 text-[11px] text-gray-600 flex-wrap">
+              <span className="text-gray-500">Stock age:</span>
+              <span className="inline-flex items-center gap-1"><span className="w-3 h-3 rounded bg-emerald-200 border border-emerald-300" /> &lt;3m</span>
+              <span className="inline-flex items-center gap-1"><span className="w-3 h-3 rounded bg-blue-200 border border-blue-300" /> &lt;6m</span>
+              <span className="inline-flex items-center gap-1"><span className="w-3 h-3 rounded bg-amber-200 border border-amber-300" /> &lt;9m</span>
+              <span className="inline-flex items-center gap-1"><span className="w-3 h-3 rounded bg-orange-200 border border-orange-300" /> &lt;12m</span>
+              <span className="inline-flex items-center gap-1"><span className="w-3 h-3 rounded bg-red-200 border border-red-300" /> ≥12m</span>
+            </div>
             <div className="flex items-center gap-3 overflow-x-auto">
               <span className="text-xs text-gray-500 flex-shrink-0">Categories:</span>
               <button
