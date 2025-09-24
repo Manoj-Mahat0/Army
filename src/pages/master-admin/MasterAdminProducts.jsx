@@ -607,6 +607,7 @@ export default function MasterAdminProducts() {
       if (form.price !== "") fd.append("price", form.price);
       if (form.gst_rate !== "") fd.append("gst_rate", form.gst_rate);
       fd.append("description", form.description || "");
+      // Send JSON strings for arrays — server accepts e.g. [1,2] and [1]
       if (form.category_ids && form.category_ids.length) fd.append("category_ids", JSON.stringify(form.category_ids));
       if (form.tag_ids && form.tag_ids.length) fd.append("tag_ids", JSON.stringify(form.tag_ids));
       if (form.file) fd.append("file", form.file);
@@ -614,7 +615,11 @@ export default function MasterAdminProducts() {
       if (!editing) {
         if (form.initial_quantity !== "") fd.append("initial_quantity", form.initial_quantity);
         fd.append("unit", form.unit || "pcs");
-        if (form.expire_date) fd.append("expire_date", form.expire_date);
+        if (form.expire_date) {
+          const exp = String(form.expire_date);
+          const expStr = exp.includes("T") ? exp : `${exp}T00:00:00`;
+          fd.append("expire_date", expStr);
+        }
         const response = await apiRequest("/products-with-stock/create", { method: "POST", body: fd });
         setProducts((prev) => [response, ...prev]);
         toast("Product created", "success");
