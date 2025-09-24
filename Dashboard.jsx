@@ -298,7 +298,13 @@ export default function Dashboard() {
             <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
             <p className="text-sm text-gray-600">Welcome back! Here's what's happening with your business.</p>
           </div>
-          <div className="text-sm text-gray-600">{user?.name || user?.email}</div>
+          <div className="flex items-center gap-3">
+            <div className="hidden sm:block text-sm text-gray-600">{user?.name || user?.email}</div>
+            <div className="flex items-center gap-2">
+              <Link to="/orders" className="px-3 py-1.5 rounded-lg text-sm bg-emerald-600 text-white hover:bg-emerald-700">Orders</Link>
+              <Link to="/inventory" className="px-3 py-1.5 rounded-lg text-sm border border-gray-200 hover:bg-gray-50">Inventory</Link>
+            </div>
+          </div>
         </div>
 
         {/* Stats */}
@@ -427,6 +433,49 @@ export default function Dashboard() {
                   )}
                 </div>
               </div>
+            )}
+          </div>
+        </div>
+
+        {/* Recent Orders */}
+        <div className="mt-8 bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+          <div className="flex items-center justify-between">
+            <h4 className="text-lg font-semibold text-gray-900">Recent Orders</h4>
+            <Link className="text-sm text-emerald-700 hover:text-emerald-800" to="/orders">View all</Link>
+          </div>
+          <div className="mt-4">
+            {loadingOrders ? (
+              <div className="space-y-2">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <SkeletonLine key={i} />
+                ))}
+              </div>
+            ) : ordersError ? (
+              <ErrorAlert message={ordersError} />
+            ) : orders.length === 0 ? (
+              <div className="text-sm text-gray-500">No recent orders.</div>
+            ) : (
+              <ul className="divide-y divide-gray-100">
+                {orders
+                  .slice()
+                  .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+                  .slice(0, 5)
+                  .map((o) => (
+                    <li key={o.id} className="py-3 flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-full bg-gray-100 text-gray-600 flex items-center justify-center text-xs font-semibold">
+                        #{o.id}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="text-sm text-gray-800 truncate">₹{o.total}</div>
+                          <div className="text-xs text-gray-500 flex-shrink-0">{new Date(o.created_at).toLocaleDateString()}</div>
+                        </div>
+                        <div className="text-xs text-gray-500 truncate">{Array.isArray(o.items) ? `${o.items.length} item(s)` : "—"}</div>
+                      </div>
+                      <Badge tone={statusTone(o.status)}>{o.status}</Badge>
+                    </li>
+                  ))}
+              </ul>
             )}
           </div>
         </div>
