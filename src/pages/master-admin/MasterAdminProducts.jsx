@@ -280,6 +280,8 @@ export default function MasterAdminProducts() {
 
   const [batches, setBatches] = useState([]);
   const [batchesDrawer, setBatchesDrawer] = useState({ open: false, product: null, list: [], loading: false });
+  const [editingBatchId, setEditingBatchId] = useState(null);
+  const [batchEdit, setBatchEdit] = useState({ quantity: "", expire_date: "", notes: "", active: true });
 
   const drawerFormRef = useRef(null);
   const tagsById = useMemo(() => {
@@ -692,10 +694,12 @@ export default function MasterAdminProducts() {
   function openBatchesDrawer(product) {
     const list = batches.filter((b) => Number(b.product_id) === Number(product.id));
     setBatchesDrawer({ open: true, product, list, loading: false });
+    setEditingBatchId(null);
   }
 
   function closeBatchesDrawer() {
     setBatchesDrawer({ open: false, product: null, list: [], loading: false });
+    setEditingBatchId(null);
   }
 
   async function createBatchForProduct(payload) {
@@ -725,6 +729,41 @@ export default function MasterAdminProducts() {
   async function deactivateBatch(batchId) {
     if (!window.confirm("Deactivate this batch?")) return;
     await patchBatch(batchId, { active: false });
+  }
+
+  function toDatetimeLocalValue(iso) {
+    if (!iso) return "";
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return "";
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    const hh = String(d.getHours()).padStart(2, "0");
+    const mi = String(d.getMinutes()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}T${hh}:${mi}`;
+  }
+
+  function startEditBatch(b) {
+    setEditingBatchId(b.id);
+    setBatchEdit({
+      quantity: String(b.quantity ?? ""),
+      expire_date: toDatetimeLocalValue(b.expire_date || b.added_at),
+      notes: b.notes || "",
+      active: Boolean(b.active),
+    });
+  }
+
+  async function saveEditBatch() {
+    if (!editingBatchId) return;
+    const body = {
+      quantity: batchEdit.quantity === "" ? undefined : Number(batchEdit.quantity),
+      unit: "box",
+      expire_date: batchEdit.expire_date ? new Date(batchEdit.expire_date).toISOString() : undefined,
+      notes: batchEdit.notes || undefined,
+      active: batchEdit.active,
+    };
+    await patchBatch(editingBatchId, body);
+    setEditingBatchId(null);
   }
 
   return (
@@ -1175,12 +1214,48 @@ export default function MasterAdminProducts() {
                     ) : (
                       batchesDrawer.list.map((b) => (
                         <div key={b.id} className="flex items-start justify-between gap-3 bg-gray-50 p-2 rounded">
-                          <div className="text-sm">
-                            <div className="font-medium">{b.batch_no || `#${b.id}`}</div>
-                            <div className="text-xs text-gray-600">Qty: {b.quantity} {b.unit || ""}</div>
-                            <div className="text-xs text-gray-500">Expiry: {b.expire_date ? formatIN(b.expire_date) : "-"}</div>
-                            <div className="text-xs text-gray-500 mt-1">Added: {b.added_at ? formatIN(b.added_at) : "-"}</div>
-                            {b.notes && <div className="text-xs text-gray-500 mt-1">Notes: {b.notes}</div>}
+                          <div className="text-sm w-full">
+                            <div className="flex items-center justify-between">
+                              <div className="font-medium text-xs text-gray-700">Batch #{b.batch_no || b.id}</div>
+                              {editingBatchId !== b.id ? (
+                                <button onClick={() => startEditBatch(b)} className="text-xs px-2 py-1 rounded border">Edit</button>
+                              ) : (
+                                <div className="flex items-center gap-2">
+                                  <button onClick={() => setEditingBatchId(null)} className="text-xs px-2 py-1 rounded border">Cancel</button>
+                                  <button onClick={saveEditBatch} className="text-xs px-2 py-1 rounded bg-emerald-600 text-white">Save</button>
+                                </div>
+                              )}
+                            </div>
+                            {editingBatchId !== b.id ? (
+                              <>
+                                <div className="text-xs text-gray-600 mt-1">Qty: {b.quantity} {b.unit || ""}</div>
+                                <div className="text-xs text-gray-500">Expiry: {b.expire_date ? formatIN(b.expire_date) : "-"}</div>
+                                <div className="text-xs text-gray-500 mt-1">Added: {b.added_at ? formatIN(b.added_at) : "-"}</div>
+                                {b.notes && <div className="text-xs text-gray-500 mt-1">Notes: {b.notes}</div>}
+                              </>
+                            ) : (
+                              <div className="grid grid-cols-1 md:grid-cols-4 gap-2 mt-2">
+                                <div>
+                                  <label className="block text-[10px] text-gray-500">Quantity</label>
+                                  <input value={batchEdit.quantity} onChange={(e) => setBatchEdit((s) => ({ ...s, quantity: e.target.value }))} type="number" className="w-full px-2 py-1 border rounded text-xs" />
+                                </div>
+                                <div className="md:col-span-2">
+                                  <label className="block text-[10px] text-gray-500">Expire</label>
+                                  <input value={batchEdit.expire_date} onChange={(e) => setBatchEdit((s) => ({ ...s, expire_date: e.target.value }))} type="datetime-local" className="w-full px-2 py-1 border rounded text-xs" />
+                                </div>
+                                <div>
+                                  <label className="block text-[10px] text-gray-500">Active</label>
+                                  <select value={batchEdit.active ? "true" : "false"} onChange={(e) => setBatchEdit((s) => ({ ...s, active: e.target.value === "true" }))} className="w-full px-2 py-1 border rounded text-xs">
+                                    <option value="true">True</option>
+                                    <option value="false">False</option>
+                                  </select>
+                                </div>
+                                <div className="md:col-span-4">
+                                  <label className="block text-[10px] text-gray-500">Notes</label>
+                                  <input value={batchEdit.notes} onChange={(e) => setBatchEdit((s) => ({ ...s, notes: e.target.value }))} className="w-full px-2 py-1 border rounded text-xs" placeholder="Notes" />
+                                </div>
+                              </div>
+                            )}
                           </div>
                           <div className="flex flex-col items-end gap-2">
                             <button onClick={() => deactivateBatch(b.id)} className="inline-flex items-center gap-2 px-2 py-1 rounded border text-sm hover:bg-red-50">
@@ -1214,7 +1289,7 @@ export default function MasterAdminProducts() {
 function CreateBatchForm({ product, onCreate }) {
   const [batchNo, setBatchNo] = useState(() => `init-${product?.id || "x"}-${Math.random().toString(36).slice(2, 8)}`);
   const [quantity, setQuantity] = useState("");
-  const [unit] = useState("pcs");
+  const [unit] = useState("box");
   const [expireDate, setExpireDate] = useState("");
   const [notes, setNotes] = useState("ok");
   const [busy, setBusy] = useState(false);
