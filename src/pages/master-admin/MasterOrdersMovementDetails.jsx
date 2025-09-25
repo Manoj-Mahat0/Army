@@ -6,6 +6,17 @@ import { useAuth } from "../../context/AuthContext";
 import { useToast } from "../../components/Toast";
 import { API_BASE, API_HOST } from "../../lib/config";
 
+const ORDER_STATUS_SEQUENCE = [
+  "placed",
+  "confirmed",
+  "processing",
+  "shipped",
+  "received",
+  "payment_checked",
+  "cancelled",
+  "returned",
+];
+
 function StatusBadge({ status }) {
   const map = {
     placed: "bg-indigo-100 text-indigo-700",
@@ -57,6 +68,51 @@ export default function MasterOrdersMovementDetails() {
   const [editReason, setEditReason] = useState("");
   const [editSaving, setEditSaving] = useState(false);
   const [editErrors, setEditErrors] = useState({});
+
+  function StepperBar({ currentStatus }) {
+    const idx = ORDER_STATUS_SEQUENCE.indexOf(String(currentStatus || "").toLowerCase());
+    const currentIndex = idx === -1 ? Math.max(0, ORDER_STATUS_SEQUENCE.length - 1) : idx;
+    return (
+      <div className="w-full overflow-x-auto">
+        <div className="flex items-center gap-2 px-2">
+          {ORDER_STATUS_SEQUENCE.map((s, i) => {
+            const completed = i < currentIndex && currentIndex >= 0;
+            const active = i === currentIndex;
+            const circleBase = "flex items-center justify-center w-8 h-8 rounded-full border transition-all flex-shrink-0";
+            const circleClass = completed
+              ? "bg-indigo-600 text-white border-indigo-600"
+              : active
+              ? "bg-white text-indigo-700 border-indigo-300 shadow-sm"
+              : "bg-white text-gray-400 border-gray-200";
+            const connectorClass = completed ? "bg-indigo-500" : active ? "bg-indigo-300" : "bg-gray-200";
+            return (
+              <React.Fragment key={s}>
+                <div className="flex flex-col items-center min-w-[72px]">
+                  <div className={`${circleBase} ${circleClass}`}>
+                    {completed ? (
+                      <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 00-1.414 0L8 12.586 4.707 9.293a1 1 0 10-1.414 1.414l4 4a1 1 0 001.414 0l8-8a1 1 0 000-1.414z" clipRule="evenodd" />
+                      </svg>
+                    ) : active ? (
+                      <span className="text-xs font-semibold">{i + 1}</span>
+                    ) : (
+                      <span className="text-xs">{i + 1}</span>
+                    )}
+                  </div>
+                  <div className={`mt-1 text-[10px] text-center truncate ${active ? "text-indigo-700 font-medium" : "text-gray-500"}`} style={{ maxWidth: 72 }}>
+                    {String(s).replaceAll("_", " ")}
+                  </div>
+                </div>
+                {i !== ORDER_STATUS_SEQUENCE.length - 1 && (
+                  <div className={`flex-1 h-0.5 ${connectorClass}`} style={{ minWidth: 24 }} aria-hidden />
+                )}
+              </React.Fragment>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
 
   async function apiRequest(path, options = {}) {
     const headers = {};
@@ -248,7 +304,7 @@ export default function MasterOrdersMovementDetails() {
         <MasterAdminSidebar />
         <main className="flex-1 p-6 md:p-8">
           <button onClick={() => navigate(-1)} className="mb-4 px-3 py-1 bg-gray-200 rounded hover:bg-gray-300">← Back</button>
-          <div className="p-6 bg_WHITE rounded shadow-sm">Order not found for vendor / order id provided.</div>
+          <div className="p-6 bg-white rounded shadow-sm">Order not found for vendor / order id provided.</div>
         </main>
       </div>
     );
@@ -260,35 +316,52 @@ export default function MasterOrdersMovementDetails() {
     <div className="min-h-screen flex bg-gray-50">
       <MasterAdminSidebar />
       <main className="flex-1 p-6 md:p-8">
-        <div className="flex items-start justify-between mb-4 gap-4">
-          <div>
-            <button onClick={() => navigate(-1)} className="mr-2 mb-2 px-3 py-1 bg-gray-200 rounded hover:bg-gray-300">← Back</button>
-            <h1 className="text-2xl font-bold">Order <span className="text-gray-500">#{order.id}</span></h1>
-            <div className="text-sm text-gray-500">Created: {formatDateTime(order.created_at)}</div>
-          </div>
+        <nav className="text-xs text-gray-500 mb-2">
+          <ol className="flex items-center gap-1">
+            <li><button onClick={() => navigate(-1)} className="hover:underline">Orders</button></li>
+            <li>/</li>
+            <li className="text-gray-700">Order #{order.id}</li>
+          </ol>
+        </nav>
 
-          <div className="flex items-center gap-3">
-            <StatusBadge status={order.status} />
-            <button onClick={() => setVendorOrdersOpen(true)} className="px-3 py-1 bg-indigo-600 text_WHITE text-sm rounded hover:bg-indigo-700">View Previous Orders</button>
-            <button onClick={() => {
-              const blob = new Blob([JSON.stringify(order, null, 2)], { type: "application/json" });
-              const url = URL.createObjectURL(blob);
-              const a = document.createElement("a");
-              a.href = url;
-              a.download = `order-${order.id}.json`;
-              a.click();
-              URL.revokeObjectURL(url);
-            }} className="px-3 py-1 border rounded text-sm">Export</button>
+        <div className="sticky top-0 z-30 bg-white/80 backdrop-blur border-b mb-4">
+          <div className="py-3 flex items-start justify-between gap-4">
+            <div>
+              <h1 className="text-xl font-bold">Order <span className="text-gray-500">#{order.id}</span></h1>
+              <div className="mt-1 flex items-center gap-2">
+                <StatusBadge status={order.status} />
+                <span className="text-xs text-gray-500">Created: {formatDateTime(order.created_at)}</span>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="text-right mr-3">
+                <div className="text-xs text-gray-500">Total</div>
+                <div className="text-base font-semibold">{fmtCurrency(order.total_amount ?? order.total ?? totals.subtotal)}</div>
+              </div>
+              <button onClick={() => setVendorOrdersOpen(true)} className="px-3 py-1 bg-indigo-600 text-white text-sm rounded hover:bg-indigo-700">Previous Orders</button>
+              <button onClick={() => {
+                const blob = new Blob([JSON.stringify(order, null, 2)], { type: "application/json" });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = `order-${order.id}.json`;
+                a.click();
+                URL.revokeObjectURL(url);
+              }} className="px-3 py-1 border rounded text-sm">Export</button>
+            </div>
+          </div>
+          <div className="pb-3">
+            <StepperBar currentStatus={order.status} />
           </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <section className="lg:col-span-2">
-            <div className="bg_WHITE rounded-lg border shadow-sm p-4">
-              <div className="flex items-center justify_between mb-3">
+            <div className="bg-white rounded-lg border shadow-sm p-4">
+              <div className="flex items-center justify-between mb-3">
                 <h2 className="text-lg font-semibold">Items ({order.items?.length || 0})</h2>
                 <div className="flex gap-2">
-                  <button onClick={openEditModal} className="px-3 py-1 bg-green-600 text_WHITE rounded text-sm hover:bg-green-700">Admin Edit Items</button>
+                  <button onClick={openEditModal} className="px-3 py-1 bg-green-600 text-white rounded text-sm hover:bg-green-700">Admin Edit Items</button>
                 </div>
               </div>
 
@@ -315,7 +388,7 @@ export default function MasterOrdersMovementDetails() {
                             <td className="py-3 px-3 align-top">
                               <div className="flex items-center gap-3">
                                 {prod && (prod.image_url || prod.image) ? (
-                                  <img src={(prod.image || prod.image_url).startsWith("http") ? (prod.image || prod.image_url) : `${API_HOST}${prod.image || prod.image_url}`} alt={prod.name} className="w-12 h-12 object_cover rounded" />
+                                  <img src={(prod.image || prod.image_url).startsWith("http") ? (prod.image || prod.image_url) : `${API_HOST}${prod.image || prod.image_url}`} alt={prod.name} className="w-12 h-12 object-cover rounded" />
                                 ) : (
                                   <div className="w-12 h-12 rounded bg-gray-200 flex items-center justify-center text-xs text-gray-500">No Image</div>
                                 )}
@@ -351,7 +424,7 @@ export default function MasterOrdersMovementDetails() {
               </div>
             </div>
 
-            <div className="mt-4 bg_WHITE rounded-lg border shadow-sm p-4">
+            <div className="mt-4 bg-white rounded-lg border shadow-sm p-4">
               <h3 className="text-lg font-semibold mb-2">Shipping & Notes</h3>
               <div className="text-sm text-gray-500">Address</div>
               <div className="font-medium">{order.shipping_address || "-"}</div>
@@ -361,7 +434,7 @@ export default function MasterOrdersMovementDetails() {
           </section>
 
           <aside>
-            <div className="bg_WHITE rounded-lg border shadow-sm p-4 mb-4">
+            <div className="bg-white rounded-lg border shadow-sm p-4 mb-4">
               <h3 className="text-md font-semibold">Vendor</h3>
               <div className="mt-2 text-sm text-gray-600">
                 {vendorUser ? (
@@ -377,11 +450,11 @@ export default function MasterOrdersMovementDetails() {
 
               <div className="mt-3 flex gap-2">
                 <button onClick={() => navigator.clipboard?.writeText(vendorUser?.email || "")} className="flex-1 px-3 py-1 border rounded text-sm">Copy Email</button>
-                <button onClick={() => { if (vendorUser) navigate(`/staff/users/${vendorUser.id}`); else toast("No vendor details", "error"); }} className="flex-1 px-3 py-1 bg-indigo-600 text_WHITE rounded text-sm">View</button>
+                <button onClick={() => { if (vendorUser) navigate(`/staff/users/${vendorUser.id}`); else toast("No vendor details", "error"); }} className="flex-1 px-3 py-1 bg-indigo-600 text-white rounded text-sm">View</button>
               </div>
             </div>
 
-            <div className="bg_WHITE rounded-lg border shadow-sm p-4">
+            <div className="bg-white rounded-lg border shadow-sm p-4">
               <h3 className="text-md font-semibold">Order Timeline</h3>
               <ol className="mt-3 space-y-3">
                 {["placed", "confirmed", "processing", "shipped", "received"].map((s) => {
@@ -414,7 +487,7 @@ export default function MasterOrdersMovementDetails() {
 
         {vendorOrdersOpen && (
           <div className="fixed inset-0 bg-black bg-opacity-40 flex justify-end z-50">
-            <div className="w-full max-w-md bg_WHITE h-full shadow-lg p-4 flex flex-col">
+            <div className="w-full max-w-md bg-white h-full shadow-lg p-4 flex flex-col">
               <div className="flex justify-between items-center mb-4">
                 <h2 className="text-lg font-bold">Previous Orders — Vendor {vendorUser?.name || `#${vendorId}`}</h2>
                 <button onClick={() => setVendorOrdersOpen(false)} className="text-gray-500 hover:text-gray-700">✕</button>
@@ -449,7 +522,7 @@ export default function MasterOrdersMovementDetails() {
         {editOpen && (
           <div className="fixed inset-0 z-60 flex items-start justify-center pt-16 px-4">
             <div className="absolute inset-0 bg-black opacity-40" onClick={() => { if (!editSaving) setEditOpen(false); }} />
-            <div className="relative bg_WHITE w-full max-w-4xl rounded-lg shadow-xl p-6 z-50 flex flex-col max-h-[80vh]">
+            <div className="relative bg-white w-full max-w-4xl rounded-lg shadow-xl p-6 z-50 flex flex-col max-h-[80vh]">
               <div className="flex items-center justify-between gap-4 mb-4">
                 <h3 className="text-lg font-semibold">Edit Items — Order #{order.id}</h3>
                 <div className="flex items-center gap-2">
@@ -481,7 +554,7 @@ export default function MasterOrdersMovementDetails() {
                       <div key={row.id ?? row.tempId ?? idx} className="grid grid-cols-12 gap-2 items-center bg-gray-50 p-3 rounded">
                         <div className="col-span-12 sm:col-span-6 flex gap-3 items-start">
                           {prod && (prod.image_url || prod.image) ? (
-                            <img src={(prod.image || prod.image_url).startsWith("http") ? (prod.image || prod.image_url) : `${API_HOST}${prod.image || prod.image_url}`} alt={prod.name} className="w-10 h-10 object_cover rounded" />
+                            <img src={(prod.image || prod.image_url).startsWith("http") ? (prod.image || prod.image_url) : `${API_HOST}${prod.image || prod.image_url}`} alt={prod.name} className="w-10 h-10 object-cover rounded" />
                           ) : (
                             <div className="w-10 h-10 rounded bg-gray-200 flex items-center justify-center text-xs text-gray-500">No Img</div>
                           )}
@@ -534,7 +607,7 @@ export default function MasterOrdersMovementDetails() {
                   })}
 
                   <div>
-                    <button onClick={addEmptyRow} disabled={editSaving} className="inline-flex items-center gap-2 px-3 py-2 border rounded bg_WHITE text-sm hover:bg-gray-50">+ Add another item</button>
+                    <button onClick={addEmptyRow} disabled={editSaving} className="inline-flex items-center gap-2 px-3 py-2 border rounded bg-white text-sm hover:bg-gray-50">+ Add another item</button>
                   </div>
                 </div>
 
@@ -544,7 +617,7 @@ export default function MasterOrdersMovementDetails() {
                 </div>
               </div>
 
-              <div className="mt-4 sticky bottom-0 bg_WHITE pt-4 -mx-6 px-6 pb-6 border-t">
+              <div className="mt-4 sticky bottom-0 bg-white pt-4 -mx-6 px-6 pb-6 border-t">
                 <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
                   <div className="text-sm text-gray-700">
                     <div>Total rows: <span className="font-semibold">{editRows.length}</span></div>
@@ -561,7 +634,7 @@ export default function MasterOrdersMovementDetails() {
                   </div>
                   <div className="flex gap-3">
                     <button onClick={() => { setEditOpen(false); }} disabled={editSaving} className="px-4 py-2 rounded border text-sm">Cancel</button>
-                    <button onClick={submitEdit} disabled={editSaving} className={`px-4 py-2 rounded text-sm text_WHITE ${editSaving ? "bg-gray-400" : "bg-blue-600 hover:bg-blue-700"}`}>
+                    <button onClick={submitEdit} disabled={editSaving} className={`px-4 py-2 rounded text-sm text-white ${editSaving ? "bg-gray-400" : "bg-blue-600 hover:bg-blue-700"}`}>
                       {editSaving ? "Saving..." : "Save changes"}
                     </button>
                   </div>
